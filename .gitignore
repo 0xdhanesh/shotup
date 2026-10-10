@@ -1,0 +1,80 @@
+# General
+# https://github.com/github/gitignore
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dependencies
+node_modules/
+bower_components/
+jspm_packages/
+vendor/
+
+# Build output
+dist/
+build/
+out/
+target/
+coverage/
+*.tsbuildinfo
+*.pyc
+*.pyo
+__pycache__/
+*.class
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Environment and secrets (non-dot names; dotfiles are covered below)
+env/
+venv/
+ENV/
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Editors and OS files whose names do not start with a dot
+*~
+*.swp
+*.swo
+*.swn
+*.sublime-workspace
+*.sublime-project
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+Icon?
+
+# Backup and merge junk
+*.bak
+*.orig
+*.rej
+
+# Dotfiles
+# Gitignore speaks globs, not regular expressions. `.*` is the glob
+# for every file or directory whose name starts with a dot, at any
+# level. A regex such as `^\.` is not applied by Git.
+.*
+
+# Re-include the dotfiles Git reads from the work tree. Without these
+# exceptions, `.*` would keep .gitignore (and the others) untracked,
+# so the rules and Git metadata could not be committed.
+# .git/ is the repository itself. Re-include that directory so the
+# dotfile rule cannot mark it ignored. Git still will not stage it.
+!.git/
+!.gitignore
+!.gitattributes
+!.gitmodules
+!.mailmap
+!.git-blame-ignore-revs
+!.gitkeep
