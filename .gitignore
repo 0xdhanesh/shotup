@@ -78,3 +78,8 @@ Icon?
 !.mailmap
 !.git-blame-ignore-revs
 !.gitkeep
+
+# Actions and Dependabot live in .github. The dotfile rule above
+# ignores that directory, so re-include it or the workflow cannot be committed.
+!.github/
+!.github/**

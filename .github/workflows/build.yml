@@ -1,0 +1,213 @@
+name: Build and release
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Test, build, and scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle 9.8.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          gradle-version: '9.8.0'
+          cache-provider: basic
+
+      - name: Install a display for the Swing tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libxrender1 libxtst6 libxi6 libxext6 fontconfig fonts-dejavu-core
+
+      - name: Test and build the jar
+        run: xvfb-run --auto-servernum gradle test jar --no-daemon
+
+      - name: Show the Gradle jar
+        run: |
+          echo "Gradle jar task output:"
+          ls -l build/libs/*.jar
+          jar tf build/libs/*.jar
+
+      - name: Prepare Trivy results
+        run: mkdir -p trivy-results
+
+      - name: Scan the source
+        id: trivy-source
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-results/source.sarif
+          exit-code: '1'
+          skip-dirs: .cache,.git,build
+        continue-on-error: true
+
+      - name: Scan the built jar
+        id: trivy-jar
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: build/libs
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-results/jar.sarif
+          exit-code: '1'
+        continue-on-error: true
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: trivy-results
+          category: trivy
+
+      - name: Require a clean Trivy scan
+        run: |
+          test "${{ steps.trivy-source.outcome }}" = "success"
+          test "${{ steps.trivy-jar.outcome }}" = "success"
+
+      - name: Upload the jar
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: shotup-jar
+          path: build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 14
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle 9.8.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          gradle-version: '9.8.0'
+          cache-provider: basic
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: java-kotlin
+          build-mode: manual
+
+      - name: Build the jar for analysis
+        run: gradle jar --no-daemon
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:java-kotlin
+
+  dependency-submission:
+    name: Dependency graph
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Submit the Gradle dependency graph
+        uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          gradle-version: '9.8.0'
+          cache-provider: basic
+          additional-arguments: --no-daemon
+
+  release:
+    name: Publish the jar
+    needs: [build, codeql, dependency-submission]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download the jar
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: shotup-jar
+          path: dist
+
+      - name: Attach the jar to a GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t jars < <(find dist -type f -name '*.jar' | sort)
+          if [ "${#jars[@]}" -ne 1 ]; then
+            echo "Expected one jar from the Gradle jar task (build/libs/*.jar)."
+            find dist -type f -print
+            exit 1
+          fi
+          jar="${jars[0]}"
+          name="$(basename "$jar")"
+          digest="$(sha256sum "$jar" | awk '{print $1}')"
+          tag="shotup-${GITHUB_SHA}"
+          notes="$(cat <<EOF
+          Built from ${GITHUB_SHA} with \`gradle test jar --no-daemon\` (Gradle 9.8.0, Java 21).
+
+          The attached file is the Gradle \`jar\` task output, \`build/libs/${name}\`.
+          SHA-256: ${digest}
+
+          Published after tests, Trivy, CodeQL, and the Gradle dependency graph succeeded.
+          EOF
+          )"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$jar" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" "$jar" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "ShotUp ${GITHUB_SHA::7}" \
+              --notes "$notes"
+          fi
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY"
