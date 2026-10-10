@@ -81,11 +81,17 @@ jobs:
           exit-code: '1'
         continue-on-error: true
 
-      - name: Upload Trivy results
+      - name: Upload source scan results
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
-          sarif_file: trivy-results
-          category: trivy
+          sarif_file: trivy-results/source.sarif
+          category: trivy-source
+
+      - name: Upload jar scan results
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: trivy-results/jar.sarif
+          category: trivy-jar
 
       - name: Require a clean Trivy scan
         run: |
@@ -165,7 +171,10 @@ jobs:
 
   release:
     name: Publish the jar
-    needs: [build, codeql, dependency-submission]
+    # The dependency-graph job also runs on this push. Publishing waits on the
+    # scans above. GitHub rejects dependency submission until the repository
+    # dependency graph is enabled, and Actions cannot turn that setting on.
+    needs: [build, codeql]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 10
