@@ -135,9 +135,11 @@ final class McpCommands {
                 "Save PNG screenshots of Proxy Intercept and HTTP history. "
                         + "Each image stacks the visible section with the full request and the full response.");
         tool(out, "capture-repeater", ready,
-                "Save a PNG of every open Repeater tab as it appears in Burp.");
+                "Save a PNG of every open Repeater tab: request and response side by side. "
+                        + "The Inspector rail is left out. Notes are included only when already open.");
         tool(out, "capture-both", ready,
-                "Save Proxy screenshots, then every open Repeater tab, and restore the tool that was open.");
+                "Save Proxy screenshots, then every open Repeater tab "
+                        + "(request and response side by side), and restore the tool that was open.");
         tool(out, "status", true,
                 "Return the Save to folder and whether a capture is running.");
         tool(out, "set-output-directory", true,

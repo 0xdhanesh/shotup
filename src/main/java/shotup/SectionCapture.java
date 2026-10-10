@@ -2,11 +2,13 @@ package shotup;
 
 import java.awt.Component;
 import java.awt.Frame;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import javax.swing.AbstractButton;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 
@@ -97,21 +99,156 @@ public final class SectionCapture {
         Component repeater = suite.getComponentAt(repeaterIndex);
         layout(repeater);
         JTabbedPane tabs = SwingSearch.repeaterTabs(repeater);
-        if (tabs == null) {
-            saveView("repeater", repeater, sink, false);
+        if (tabs != null) {
+            int previous = tabs.getSelectedIndex();
+            try {
+                for (int i = 0; i < tabs.getTabCount(); i++) {
+                    String name = "repeater-" + String.format("%02d", i + 1) + "-"
+                            + SwingSearch.safeName(repeaterTitle(tabs, i));
+                    select(tabs, i);
+                    captureMessage(name, tabs.getSelectedComponent(), repeater, sink);
+                }
+            } finally {
+                select(tabs, previous);
+            }
             return;
         }
-        int previous = tabs.getSelectedIndex();
-        try {
-            for (int i = 0; i < tabs.getTabCount(); i++) {
-                String title = SwingSearch.safeName(tabs.getTitleAt(i));
-                String name = "repeater-" + String.format("%02d", i + 1) + "-" + title;
-                select(tabs, i);
-                saveView(name, tabs, sink, false);
+        List<Component> captions = SwingSearch.repeaterCaptions(repeater);
+        if (!captions.isEmpty()) {
+            List<AbstractButton> selected = selectedButtons(repeater);
+            try {
+                int index = 1;
+                for (Component caption : captions) {
+                    activateCaption(caption);
+                    layout(repeater);
+                    String name = "repeater-" + String.format("%02d", index++) + "-"
+                            + SwingSearch.safeName(SwingSearch.captionText(caption));
+                    captureMessage(name, repeater, repeater, sink);
+                }
+            } finally {
+                restoreButtons(selected);
             }
-        } finally {
-            select(tabs, previous);
+            return;
         }
+        captureMessage("repeater", repeater, repeater, sink);
+    }
+
+    private static String repeaterTitle(JTabbedPane tabs, int index) {
+        String title = tabs.getTitleAt(index);
+        if (title != null && !title.isBlank()) {
+            return title;
+        }
+        Component header = tabs.getTabComponentAt(index);
+        return header == null ? "" : SwingSearch.rawText(header);
+    }
+
+    /**
+     * Request and response side by side. The Inspector and Custom actions rail
+     * is left out. Notes are appended only when that panel is already open.
+     */
+    private static void captureMessage(String name, Component scope, Component repeater, ShotSink sink) {
+        Component request = editorIn(scope, repeater, true);
+        Component response = editorIn(scope, repeater, false);
+        Component captured = null;
+        BufferedImage image = null;
+        if (request != null && response != null && request != response) {
+            Component area = SwingSearch.editorArea(request, response);
+            if (area != null) {
+                captured = SwingSearch.includeToolbar(area);
+                image = paintVisible(captured);
+            }
+            if (image == null) {
+                BufferedImage left = paintVisible(request);
+                BufferedImage right = paintVisible(response);
+                if (left != null && right != null) {
+                    image = ComponentImages.row(left, right);
+                    captured = null;
+                }
+            }
+        } else if (request != null || response != null) {
+            captured = request != null ? request : response;
+            image = paintVisible(captured);
+        }
+        if (image == null) {
+            captured = scope == null ? repeater : scope;
+            image = paintVisible(captured);
+        }
+        if (image == null) {
+            sink.accept(name, new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB),
+                    "The section has no size yet. Open it once in Burp and try again.");
+            return;
+        }
+        Component notes = SwingSearch.visibleNotes(repeater);
+        if (notes != null && (captured == null || !SwingSearch.contains(captured, notes))) {
+            BufferedImage notesImage = paintVisible(notes);
+            if (notesImage != null) {
+                image = ComponentImages.row(image, notesImage);
+            }
+        }
+        sink.accept(name, image, "");
+    }
+
+    private static Component editorIn(Component scope, Component repeater, boolean request) {
+        Component found = scope == null ? null : SwingSearch.messageEditor(scope, request);
+        if (found != null) {
+            return found;
+        }
+        if (repeater != null && repeater != scope) {
+            return SwingSearch.messageEditor(repeater, request);
+        }
+        return null;
+    }
+
+    private static BufferedImage paintVisible(Component view) {
+        layout(view);
+        if (view == null || view.getWidth() <= 0 || view.getHeight() <= 0) {
+            return null;
+        }
+        return ComponentImages.capture(view);
+    }
+
+    private static List<AbstractButton> selectedButtons(Component root) {
+        List<AbstractButton> selected = new ArrayList<>();
+        for (AbstractButton button : SwingSearch.findAll(root, AbstractButton.class)) {
+            if (button.isSelected()) {
+                selected.add(button);
+            }
+        }
+        return selected;
+    }
+
+    private static void restoreButtons(List<AbstractButton> selected) {
+        for (AbstractButton button : selected) {
+            if (!button.isSelected()) {
+                button.doClick(0);
+            }
+        }
+    }
+
+    private static void activateCaption(Component caption) {
+        AbstractButton button = buttonFor(caption);
+        if (button != null) {
+            button.doClick(0);
+            return;
+        }
+        long when = System.currentTimeMillis();
+        caption.dispatchEvent(new MouseEvent(
+                caption, MouseEvent.MOUSE_PRESSED, when, 0, 1, 1, 1, false, MouseEvent.BUTTON1));
+        caption.dispatchEvent(new MouseEvent(
+                caption, MouseEvent.MOUSE_RELEASED, when, 0, 1, 1, 1, false, MouseEvent.BUTTON1));
+        caption.dispatchEvent(new MouseEvent(
+                caption, MouseEvent.MOUSE_CLICKED, when, 0, 1, 1, 1, false, MouseEvent.BUTTON1));
+    }
+
+    private static AbstractButton buttonFor(Component caption) {
+        Component current = caption;
+        for (int i = 0; i < 4 && current != null; i++) {
+            if (current instanceof AbstractButton button) {
+                return button;
+            }
+            current = current.getParent();
+        }
+        return null;
     }
 
     private static void captureTab(JTabbedPane tabs, String title, String name, ShotSink sink, boolean includeEditors) {

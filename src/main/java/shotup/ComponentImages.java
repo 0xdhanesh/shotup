@@ -86,6 +86,20 @@ final class ComponentImages {
         return image;
     }
 
+    /** Places two captures next to each other, top-aligned. */
+    static BufferedImage row(BufferedImage left, BufferedImage right) {
+        int width = left.getWidth() + right.getWidth();
+        int height = Math.max(left.getHeight(), right.getHeight());
+        BufferedImage image = new BufferedImage(Math.max(width, 1), Math.max(height, 1), BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setColor(new Color(32, 32, 32));
+        graphics.fillRect(0, 0, image.getWidth(), image.getHeight());
+        graphics.drawImage(left, 0, 0, null);
+        graphics.drawImage(right, left.getWidth(), 0, null);
+        graphics.dispose();
+        return image;
+    }
+
     static List<Integer> scrollStops(int minimum, int last, int extent) {
         List<Integer> stops = new ArrayList<>();
         int step = Math.max(extent, 1);

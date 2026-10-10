@@ -13,7 +13,7 @@ import burp.api.montoya.ui.menu.Menu;
 public class ShotUpExtension implements BurpExtension {
     static final String NAME = "ShotUp";
     /** Keep this equal to {@code version} in build.gradle. */
-    static final String VERSION = "1.1.0";
+    static final String VERSION = "2.0.0";
 
     @Override
     public void initialize(MontoyaApi api) {

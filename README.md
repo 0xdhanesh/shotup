@@ -15,7 +15,7 @@ The ShotUp tab and the ShotUp menu work on their own. Load burp-mcp in the same 
 gradle test jar --no-daemon
 ```
 
-The jar is `build/libs/shotup-1.1.0.jar`. The version comes from `build.gradle`.
+The jar is `build/libs/shotup-2.0.0.jar`. The version comes from `build.gradle`.
 
 The tests paint Swing components, so they need a display. The GitHub Actions workflow runs them under `xvfb-run` on Ubuntu. On macOS they use the window server.
 
@@ -23,7 +23,7 @@ The tests paint Swing components, so they need a display. The GitHub Actions wor
 
 1. In Burp, open **Extensions → Installed → Add**.
 2. Set the extension type to **Java**.
-3. Select `build/libs/shotup-1.1.0.jar`.
+3. Select `build/libs/shotup-2.0.0.jar`.
 
 Burp adds a **ShotUp** suite tab and a **ShotUp** menu. The extension output shows `ShotUp loaded` when the jar starts.
 
@@ -36,7 +36,7 @@ The Burp window has to be open. ShotUp selects Proxy or Repeater, takes the pict
 | Action | What it saves |
 | --- | --- |
 | Capture Proxy | `proxy-intercept.png` and `proxy-http-history.png`. Each image stacks the visible section with the full request and the full response. |
-| Capture Repeater | One PNG per open Repeater tab, named `repeater-01-<title>.png`, `repeater-02-<title>.png`, and so on. The picture is the tab as it appears. |
+| Capture Repeater | One PNG per open Repeater tab, named `repeater-01-<title>.png`, `repeater-02-<title>.png`, and so on. Each picture is the request and response editors side by side. The Inspector and Custom actions rail is left out. Notes are included only when that panel is already open. |
 | Capture both | Proxy, then Repeater. |
 
 A message that would make the stacked image taller than 30000 pixels is saved as separate files: `<name>-section.png`, `<name>-request.png`, and `<name>-response.png`. Request and response editors are capped at 8000×14000 pixels. The ShotUp log records that truncation.
@@ -103,14 +103,14 @@ body: {"outputDirectory":"/tmp/shotup"}
 A successful body looks like:
 
 ```json
-{"ok":true,"extension":"ShotUp","version":"1.1.0","action":"capture-both","outputDirectory":"/tmp/shotup/20261010-153045","count":4,"files":[{"name":"proxy-intercept","path":"/tmp/shotup/20261010-153045/proxy-intercept.png","detail":""}]}
+{"ok":true,"extension":"ShotUp","version":"2.0.0","action":"capture-both","outputDirectory":"/tmp/shotup/20261010-153045","count":4,"files":[{"name":"proxy-intercept","path":"/tmp/shotup/20261010-153045/proxy-intercept.png","detail":""}]}
 ```
 
 The call blocks until the PNGs are written. Burp switches to Proxy and Repeater during the capture, then returns to the tool you had open.
 
 ## How the picture is taken
 
-The Montoya API has no screenshot method, and Repeater has no call that reads open tabs. ShotUp walks the frame from `UserInterface.swingUtils().suiteFrame()`, selects the Proxy and Repeater tabs, and paints those components. That is why the Burp window has to be showing.
+The Montoya API has no screenshot method, and Repeater has no call that reads open tabs. ShotUp walks the frame from `UserInterface.swingUtils().suiteFrame()`, selects the Proxy and Repeater tabs, and paints those components. Repeater paints the request and response editors, not the Inspector / Custom actions rail. Notes are included only when that panel is already open. That is why the Burp window has to be showing.
 
 ## Project layout
 

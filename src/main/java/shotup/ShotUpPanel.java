@@ -45,7 +45,8 @@ final class ShotUpPanel extends JPanel implements McpCommands.ShotActions {
         JTextArea help = new JTextArea("""
                 Captures the Proxy and Repeater sections from the Burp window.
                 Proxy captures Intercept and HTTP history, with the full request and response appended.
-                Repeater captures every open tab exactly as it appears, with no separate request or response image.
+                Repeater saves one picture per open tab: the request and response editors side by side.
+                The Inspector and Custom actions rail is left out. Notes are included only when that panel is already open.
                 The tool you were using is selected again when the capture finishes.
                 burp-mcp runs the same captures with the header X-Burp-Mcp-Discover.
                 """);

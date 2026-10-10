@@ -16,7 +16,7 @@ class McpCommandsTest {
 
         assertEquals(200, reply.status());
         assertTrue(reply.body().contains("\"extension\":\"ShotUp\""));
-        assertTrue(reply.body().contains("\"version\":\"1.1.0\""));
+        assertTrue(reply.body().contains("\"version\":\"2.0.0\""));
         assertTrue(reply.body().contains("\"commandHeader\":\"X-Burp-Mcp-Discover\""));
         assertTrue(reply.body().contains(
                 "\"commands\":\"tools, status, capture-proxy, capture-repeater, capture-both, set-output-directory\""));
@@ -58,7 +58,7 @@ class McpCommandsTest {
         McpCommands.Reply reply = McpCommands.execute("status", "   ", actions);
         assertEquals(200, reply.status());
         assertEquals(
-                "{\"ok\":true,\"extension\":\"ShotUp\",\"version\":\"1.1.0\",\"action\":\"status\","
+                "{\"ok\":true,\"extension\":\"ShotUp\",\"version\":\"2.0.0\",\"action\":\"status\","
                         + "\"busy\":false,\"outputDirectory\":\"/tmp/ShotUp\","
                         + "\"commandHeader\":\"X-Burp-Mcp-Discover\","
                         + "\"commands\":\"tools, status, capture-proxy, capture-repeater, capture-both, set-output-directory\"}",
@@ -79,7 +79,7 @@ class McpCommandsTest {
         assertFalse(actions.repeater);
         assertEquals("/tmp/shots", actions.requestedDirectory);
         assertEquals(
-                "{\"ok\":true,\"extension\":\"ShotUp\",\"version\":\"1.1.0\",\"action\":\"capture-proxy\","
+                "{\"ok\":true,\"extension\":\"ShotUp\",\"version\":\"2.0.0\",\"action\":\"capture-proxy\","
                         + "\"outputDirectory\":\"/tmp/ShotUp/20261010-120000\",\"count\":1,\"files\":["
                         + "{\"name\":\"proxy-intercept\",\"path\":\"/tmp/ShotUp/20261010-120000/proxy-intercept.png\","
                         + "\"detail\":\"Request was truncated at 8000x14000 pixels.\"}]}",
