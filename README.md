@@ -15,7 +15,7 @@ The ShotUp tab and the ShotUp menu work on their own. Load burp-mcp in the same 
 gradle test jar --no-daemon
 ```
 
-The jar is `build/libs/shotup-1.0.0.jar`. The version comes from `build.gradle`.
+The jar is `build/libs/shotup-1.1.0.jar`. The version comes from `build.gradle`.
 
 The tests paint Swing components, so they need a display. The GitHub Actions workflow runs them under `xvfb-run` on Ubuntu. On macOS they use the window server.
 
@@ -23,7 +23,7 @@ The tests paint Swing components, so they need a display. The GitHub Actions wor
 
 1. In Burp, open **Extensions → Installed → Add**.
 2. Set the extension type to **Java**.
-3. Select `build/libs/shotup-1.0.0.jar`.
+3. Select `build/libs/shotup-1.1.0.jar`.
 
 Burp adds a **ShotUp** suite tab and a **ShotUp** menu. The extension output shows `ShotUp loaded` when the jar starts.
 
@@ -103,7 +103,7 @@ body: {"outputDirectory":"/tmp/shotup"}
 A successful body looks like:
 
 ```json
-{"ok":true,"extension":"ShotUp","version":"1.0.0","action":"capture-both","outputDirectory":"/tmp/shotup/20261010-153045","count":4,"files":[{"name":"proxy-intercept","path":"/tmp/shotup/20261010-153045/proxy-intercept.png","detail":""}]}
+{"ok":true,"extension":"ShotUp","version":"1.1.0","action":"capture-both","outputDirectory":"/tmp/shotup/20261010-153045","count":4,"files":[{"name":"proxy-intercept","path":"/tmp/shotup/20261010-153045/proxy-intercept.png","detail":""}]}
 ```
 
 The call blocks until the PNGs are written. Burp switches to Proxy and Repeater during the capture, then returns to the tool you had open.
