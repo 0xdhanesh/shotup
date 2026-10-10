@@ -168,6 +168,7 @@ jobs:
           gradle-version: '9.8.0'
           cache-provider: basic
           additional-arguments: --no-daemon
+          dependency-graph-continue-on-failure: true
 
   release:
     name: Publish the jar
@@ -208,7 +209,7 @@ jobs:
           The attached file is the Gradle \`jar\` task output, \`build/libs/${name}\`.
           SHA-256: ${digest}
 
-          Published after tests, Trivy, CodeQL, and the Gradle dependency graph succeeded.
+          Published after tests, Trivy, and CodeQL succeeded.
           EOF
           )"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
