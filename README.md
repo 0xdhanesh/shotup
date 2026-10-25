@@ -8,6 +8,7 @@ The ShotUp tab and the ShotUp menu work on their own. Load burp-mcp in the same 
 
 - Burp Suite with the Montoya API. This project compiles against `net.portswigger.burp.extensions:montoya-api:2026.7`.
 - Java 21 or newer, to build. The jar targets Java 21.
+- Gradle 9.8.0 to build locally (the same version used in GitHub Actions).
 
 ## Build
 
