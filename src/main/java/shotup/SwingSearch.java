@@ -3,11 +3,14 @@ package shotup;
 import java.awt.Component;
 import java.awt.Container;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import javax.swing.AbstractButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -19,6 +22,13 @@ import javax.swing.JTabbedPane;
 final class SwingSearch {
     private static final Set<String> EDITOR_VIEW_TITLES = Set.of(
             "pretty", "raw", "hex", "render", "headers");
+    private static final Set<String> CAPTION_CHROME = Set.of(
+            "send", "cancel", "pretty", "raw", "hex", "render", "headers",
+            "inspector", "notes", "note", "search", "target", "proxy", "repeater",
+            "http/1", "http/2", "burp ai", "custom actions", "request", "response",
+            "intercept", "http history", "websockets history", "dashboard", "learn",
+            "organizer", "intruder", "logger", "comparer", "decoder", "sequencer",
+            "extensions", "collaborator");
 
     private SwingSearch() {
     }
@@ -76,15 +86,15 @@ final class SwingSearch {
     }
 
     /**
-     * Repeater's own tab strip, not the Pretty/Raw switcher or the
-     * Request/Response switcher nested inside a message.
+     * Repeater's own tab strip, not the Pretty/Raw switcher, the
+     * Request/Response switcher, or the Inspector / Notes / Custom actions rail.
      */
     static JTabbedPane repeaterTabs(Component repeaterRoot) {
         JTabbedPane found = null;
         int foundTabs = -1;
         int foundDepth = Integer.MAX_VALUE;
         for (JTabbedPane pane : findAll(repeaterRoot, JTabbedPane.class)) {
-            if (pane.getTabCount() == 0 || isEditorChrome(pane)) {
+            if (pane.getTabCount() == 0 || isEditorChrome(pane) || isSideDock(pane)) {
                 continue;
             }
             int depth = depth(repeaterRoot, pane);
@@ -98,6 +108,175 @@ final class SwingSearch {
             }
         }
         return found;
+    }
+
+    /**
+     * Burp 2026 paints Repeater captions on their own strip. Those captions are
+     * buttons or labels, and the only {@link JTabbedPane} in the tool is often
+     * the right-hand rail.
+     */
+    static List<Component> repeaterCaptions(Component repeaterRoot) {
+        List<Component> captions = new ArrayList<>();
+        for (Component component : walk(repeaterRoot)) {
+            if (!(component instanceof JLabel) && !(component instanceof AbstractButton)) {
+                continue;
+            }
+            if (component instanceof JLabel && component.getParent() instanceof AbstractButton) {
+                continue;
+            }
+            if (!isRepeaterCaption(captionText(component)) || inChrome(component)) {
+                continue;
+            }
+            captions.add(component);
+        }
+        List<Component> grouped = List.of();
+        for (int levels = 1; levels <= 3 && grouped.size() < 2; levels++) {
+            grouped = largestSiblingGroup(captions, levels);
+        }
+        if (grouped.size() < 2) {
+            return List.of();
+        }
+        List<Component> sorted = new ArrayList<>(grouped);
+        sorted.sort(Comparator.comparingInt(SwingSearch::captionY).thenComparingInt(SwingSearch::captionX));
+        return sorted;
+    }
+
+    /**
+     * The request or response editor. Burp 2026 names those panels
+     * {@code httpRequestMessageAnalyser} and {@code httpResponseMessageAnalyser}.
+     */
+    static Component messageEditor(Component root, boolean request) {
+        if (root == null) {
+            return null;
+        }
+        String name = request ? "httpRequestMessageAnalyser" : "httpResponseMessageAnalyser";
+        Component named = namedEditor(root, name);
+        if (named != null && !insideSideDock(named)) {
+            return growEditor(named);
+        }
+        String role = request ? "request" : "response";
+        Component marker = showingMarker(root, role);
+        if (marker == null) {
+            marker = marker(root, role);
+        }
+        if (marker == null || insideSideDock(marker)) {
+            return null;
+        }
+        Container searchRoot = ancestor(marker);
+        if (searchRoot == null) {
+            return null;
+        }
+        JScrollPane pane = nearest(marker, largeScrollPanes(searchRoot, marker));
+        if (pane == null || insideSideDock(pane)) {
+            return null;
+        }
+        return growEditor(pane);
+    }
+
+    /** Tightest component that holds both editors and not the side rail. */
+    static Component editorArea(Component request, Component response) {
+        Component current = request;
+        while (current != null) {
+            if (current != request && contains(current, response)) {
+                if (containsSideDock(current, request)) {
+                    return null;
+                }
+                return current;
+            }
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    /** Include the Send bar when an ancestor holds it and still excludes the rail. */
+    static Component includeToolbar(Component area) {
+        if (area == null) {
+            return null;
+        }
+        Component best = area;
+        Component current = area;
+        while (current.getParent() != null) {
+            Component parent = current.getParent();
+            if (containsSideDock(parent, area)) {
+                break;
+            }
+            if (hasSend(parent)) {
+                best = parent;
+            }
+            current = parent;
+        }
+        return best;
+    }
+
+    /**
+     * Notes content when that rail tab is already selected. Inspector and
+     * Custom actions are not returned, and this does not switch tabs.
+     */
+    static Component visibleNotes(Component root) {
+        if (root == null) {
+            return null;
+        }
+        for (JTabbedPane pane : findAll(root, JTabbedPane.class)) {
+            if (!isSideDock(pane) || !pane.isShowing()) {
+                continue;
+            }
+            int index = pane.getSelectedIndex();
+            if (index < 0 || !isNotesLabel(tabLabel(pane, index))) {
+                continue;
+            }
+            Component selected = pane.getComponentAt(index);
+            if (selected != null && selected.isShowing() && selected.getWidth() > 40 && selected.getHeight() > 40) {
+                return selected;
+            }
+        }
+        Component named = namedEditor(root, "notesCollapsibleViewTextArea");
+        if (named != null && named.isShowing() && !insideSideDock(named)
+                && named.getWidth() > 40 && named.getHeight() > 40) {
+            return named;
+        }
+        return null;
+    }
+
+    static String tabLabel(JTabbedPane pane, int index) {
+        String title = normalize(pane.getTitleAt(index));
+        if (!title.isEmpty()) {
+            return title;
+        }
+        Component header = pane.getTabComponentAt(index);
+        return header == null ? "" : normalize(rawText(header));
+    }
+
+    static String captionText(Component component) {
+        if (component instanceof AbstractButton button && button.getText() != null) {
+            return button.getText();
+        }
+        if (component instanceof JLabel label && label.getText() != null) {
+            return label.getText();
+        }
+        return "";
+    }
+
+    static boolean isSideDock(JTabbedPane pane) {
+        boolean inspector = false;
+        boolean custom = false;
+        boolean notes = false;
+        int other = 0;
+        for (int i = 0; i < pane.getTabCount(); i++) {
+            String title = tabLabel(pane, i);
+            if (title.equals("inspector")) {
+                inspector = true;
+            } else if (title.contains("custom action")) {
+                custom = true;
+            } else if (isNotesLabel(title)) {
+                notes = true;
+            } else if (!title.isEmpty()) {
+                other++;
+            }
+        }
+        if (other > 0) {
+            return false;
+        }
+        return inspector || custom || (notes && pane.getTabCount() > 1);
     }
 
     /** The scroll pane that holds a message editor, including a tab whose content is the pane itself. */
@@ -127,7 +306,7 @@ final class SwingSearch {
         boolean requestOrResponse = false;
         boolean onlyViews = true;
         for (int i = 0; i < pane.getTabCount(); i++) {
-            String title = normalize(pane.getTitleAt(i));
+            String title = tabLabel(pane, i);
             if (title.equals("request") || title.equals("response")) {
                 requestOrResponse = true;
             }
@@ -136,6 +315,172 @@ final class SwingSearch {
             }
         }
         return requestOrResponse || onlyViews;
+    }
+
+    static String rawText(Component component) {
+        StringBuilder text = new StringBuilder();
+        for (Component child : walk(component)) {
+            if (child instanceof JLabel && child.getParent() instanceof AbstractButton) {
+                continue;
+            }
+            String part = captionText(child);
+            if (part.isBlank()) {
+                continue;
+            }
+            if (!text.isEmpty()) {
+                text.append(' ');
+            }
+            text.append(part.trim());
+        }
+        return text.toString();
+    }
+
+    private static boolean isRepeaterCaption(String text) {
+        String title = normalize(text);
+        if (title.length() < 2 || title.length() > 80) {
+            return false;
+        }
+        return !CAPTION_CHROME.contains(title) && !title.startsWith("send ");
+    }
+
+    private static boolean inChrome(Component component) {
+        Component current = component;
+        while (current != null) {
+            if (current instanceof JTabbedPane tabs && (isSideDock(tabs) || isEditorChrome(tabs))) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
+    }
+
+    private static List<Component> largestSiblingGroup(List<Component> captions, int levels) {
+        Map<Component, List<Component>> groups = new IdentityHashMap<>();
+        for (Component caption : captions) {
+            Component key = ancestorAt(caption, levels);
+            if (key == null) {
+                continue;
+            }
+            groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(caption);
+        }
+        List<Component> best = List.of();
+        for (List<Component> group : groups.values()) {
+            if (group.size() > best.size()) {
+                best = group;
+            }
+        }
+        return best;
+    }
+
+    private static Component ancestorAt(Component component, int levels) {
+        Component current = component;
+        for (int i = 0; i < levels && current != null; i++) {
+            current = current.getParent();
+        }
+        return current;
+    }
+
+    private static int captionX(Component component) {
+        if (component.isShowing()) {
+            return component.getLocationOnScreen().x;
+        }
+        return component.getX();
+    }
+
+    private static int captionY(Component component) {
+        if (component.isShowing()) {
+            return component.getLocationOnScreen().y;
+        }
+        return component.getY();
+    }
+
+    private static Component namedEditor(Component root, String name) {
+        Component best = null;
+        long bestScore = -1;
+        for (Component component : walk(root)) {
+            if (!(component instanceof JComponent jcomponent)) {
+                continue;
+            }
+            String componentName = jcomponent.getName();
+            if (componentName == null || !componentName.equalsIgnoreCase(name)) {
+                continue;
+            }
+            if (insideSideDock(component)) {
+                continue;
+            }
+            long area = (long) Math.max(component.getWidth(), 0) * Math.max(component.getHeight(), 0);
+            long score = (component.isShowing() ? 1_000_000_000L : 0L) + area;
+            if (score > bestScore) {
+                best = component;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private static boolean insideSideDock(Component component) {
+        Component current = component;
+        while (current != null) {
+            if (current instanceof JTabbedPane tabs && isSideDock(tabs)) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
+    }
+
+    private static Component growEditor(Component editor) {
+        Component current = editor;
+        while (current.getParent() instanceof JTabbedPane tabs && isEditorChrome(tabs)) {
+            current = tabs;
+        }
+        return current;
+    }
+
+    private static Component showingMarker(Component root, String role) {
+        for (Component component : walk(root)) {
+            if (!component.isShowing()) {
+                continue;
+            }
+            if (role.equals(normalize(captionText(component)))) {
+                return component;
+            }
+        }
+        return null;
+    }
+
+    private static Container ancestor(Component marker) {
+        Component current = marker;
+        while (current != null && current.getParent() != null) {
+            Container parent = current.getParent();
+            if (!largeScrollPanes(parent, marker).isEmpty()) {
+                return parent;
+            }
+            current = parent;
+        }
+        return marker == null ? null : marker.getParent();
+    }
+
+    private static boolean containsSideDock(Component root, Component editor) {
+        for (JTabbedPane pane : findAll(root, JTabbedPane.class)) {
+            if (isSideDock(pane) && !contains(pane, editor)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasSend(Component root) {
+        for (Component component : walk(root)) {
+            if ("send".equals(normalize(captionText(component)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isNotesLabel(String title) {
+        return "notes".equals(title) || "note".equals(title);
     }
 
     static JScrollPane requestEditor(Component view) {
@@ -252,7 +597,7 @@ final class SwingSearch {
         return pane.isShowing() && pane.getWidth() >= 80 && pane.getHeight() >= 40;
     }
 
-    private static boolean contains(Component ancestor, Component child) {
+    static boolean contains(Component ancestor, Component child) {
         Component current = child;
         while (current != null) {
             if (current == ancestor) {

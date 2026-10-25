@@ -26,7 +26,7 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
-final class ShotUpPanel extends JPanel {
+final class ShotUpPanel extends JPanel implements McpCommands.ShotActions {
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final String PREF_DIR = "outputDir";
 
@@ -45,8 +45,10 @@ final class ShotUpPanel extends JPanel {
         JTextArea help = new JTextArea("""
                 Captures the Proxy and Repeater sections from the Burp window.
                 Proxy captures Intercept and HTTP history, with the full request and response appended.
-                Repeater captures every open tab exactly as it appears, with no separate request or response image.
+                Repeater saves one picture per open tab: the request and response editors side by side.
+                The Inspector and Custom actions rail is left out. Notes are included only when that panel is already open.
                 The tool you were using is selected again when the capture finishes.
+                burp-mcp runs the same captures with the header X-Burp-Mcp-Discover.
                 """);
         help.setEditable(false);
         help.setLineWrap(true);
@@ -78,15 +80,46 @@ final class ShotUpPanel extends JPanel {
     }
 
     void captureProxy() {
-        capture(true, false);
+        startCapture(true, false);
     }
 
     void captureRepeater() {
-        capture(false, true);
+        startCapture(false, true);
     }
 
     void captureBoth() {
-        capture(true, true);
+        startCapture(true, true);
+    }
+
+    @Override
+    public boolean busy() {
+        return busy.get();
+    }
+
+    @Override
+    public String outputDirectory() {
+        String[] value = new String[1];
+        ComponentImages.runOnEdt(() -> value[0] = displayedDirectory());
+        return value[0];
+    }
+
+    @Override
+    public void setOutputDirectory(String path) {
+        String folder = path == null ? "" : path.trim();
+        ComponentImages.runOnEdt(() -> {
+            directory.setText(folder);
+            Preferences.userNodeForPackage(ShotUpPanel.class).put(PREF_DIR, folder);
+        });
+    }
+
+    @Override
+    public McpCommands.CaptureOutcome capture(boolean proxy, boolean repeater, String outputDirectory) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            return runCapture(proxy, repeater, outputDirectory);
+        }
+        McpCommands.CaptureOutcome[] outcome = new McpCommands.CaptureOutcome[1];
+        ComponentImages.runOnEdt(() -> outcome[0] = runCapture(proxy, repeater, outputDirectory));
+        return outcome[0];
     }
 
     private JButton action(String caption, Runnable action) {
@@ -96,51 +129,72 @@ final class ShotUpPanel extends JPanel {
         return button;
     }
 
-    private void capture(boolean proxy, boolean repeater) {
-        if (!busy.compareAndSet(false, true)) {
+    private void startCapture(boolean proxy, boolean repeater) {
+        if (busy.get()) {
             return;
         }
-        setBusy(true, "Capturing. Burp will switch tools, then return to the one you had open.");
-        SwingUtilities.invokeLater(() -> {
-            try {
-                Path dir = outputDirectory();
-                Files.createDirectories(dir);
-                Preferences.userNodeForPackage(ShotUpPanel.class).put(PREF_DIR, directory.getText().trim());
-                Frame frame = api.userInterface().swingUtils().suiteFrame();
-                List<String> saved = new ArrayList<>();
-                SectionCapture.capture(frame, proxy, repeater, (name, image, detail) -> save(dir, saved, name, image, detail));
-                status.setText("Saved " + saved.size() + " image" + (saved.size() == 1 ? "" : "s") + " to " + dir);
-                api.logging().logToOutput("ShotUp saved " + saved.size() + " image(s) to " + dir);
-            } catch (Exception exception) {
-                status.setText("Capture failed.");
-                append(exception.getMessage() == null ? exception.toString() : exception.getMessage());
-                api.logging().logToError("ShotUp capture failed: " + exception);
-            } finally {
-                busy.set(false);
-                setBusy(false, status.getText());
-            }
-        });
+        SwingUtilities.invokeLater(() -> runCapture(proxy, repeater, null));
     }
 
-    private void save(Path dir, List<String> saved, String name, BufferedImage image, String detail) {
+    private McpCommands.CaptureOutcome runCapture(boolean proxy, boolean repeater, String outputOverride) {
+        if (!busy.compareAndSet(false, true)) {
+            return McpCommands.CaptureOutcome.inProgress();
+        }
+        setBusy(true, "Capturing. Burp will switch tools, then return to the one you had open.");
+        try {
+            if (outputOverride != null && !outputOverride.isBlank()) {
+                directory.setText(outputOverride.trim());
+            }
+            Path dir = timestampedDirectory().toAbsolutePath().normalize();
+            Preferences.userNodeForPackage(ShotUpPanel.class).put(PREF_DIR, directory.getText().trim());
+            Frame frame = api.userInterface().swingUtils().suiteFrame();
+            List<McpCommands.SavedFile> saved = new ArrayList<>();
+            SectionCapture.capture(frame, proxy, repeater, (name, image, detail) -> saved.add(save(dir, name, image, detail)));
+            if (saved.isEmpty()) {
+                Files.createDirectories(dir);
+            }
+            status.setText("Saved " + saved.size() + " image" + (saved.size() == 1 ? "" : "s") + " to " + dir);
+            api.logging().logToOutput("ShotUp saved " + saved.size() + " image(s) to " + dir);
+            return McpCommands.CaptureOutcome.saved(dir.toAbsolutePath().toString(), saved);
+        } catch (Exception exception) {
+            String message = exception.getMessage() == null ? exception.toString() : exception.getMessage();
+            status.setText("Capture failed.");
+            append(message);
+            api.logging().logToError("ShotUp capture failed: " + exception);
+            return McpCommands.CaptureOutcome.failed(message);
+        } finally {
+            busy.set(false);
+            setBusy(false, status.getText());
+        }
+    }
+
+    private McpCommands.SavedFile save(Path dir, String name, BufferedImage image, String detail) {
         Path file = dir.resolve(name + ".png");
         try {
+            Files.createDirectories(dir);
             ImageIO.write(image, "png", file.toFile());
         } catch (IOException exception) {
             throw new IllegalStateException("Could not write " + file, exception);
         }
+        String shown = detail == null ? "" : detail;
         String line = file.toString();
-        if (detail != null && !detail.isBlank()) {
-            line += " — " + detail;
+        if (!shown.isBlank()) {
+            line += " — " + shown;
         }
-        saved.add(line);
         append(line);
+        return new McpCommands.SavedFile(name, file.toAbsolutePath().normalize().toString(), shown);
     }
 
-    private Path outputDirectory() {
+    private Path timestampedDirectory() {
+        return Path.of(displayedDirectory()).resolve(STAMP.format(LocalDateTime.now()));
+    }
+
+    private String displayedDirectory() {
         String text = directory.getText().trim();
-        Path root = text.isEmpty() ? Path.of(System.getProperty("user.home"), "ShotUp") : Path.of(text);
-        return root.resolve(STAMP.format(LocalDateTime.now()));
+        if (text.isEmpty()) {
+            return Path.of(System.getProperty("user.home"), "ShotUp").toString();
+        }
+        return text;
     }
 
     private void chooseDirectory() {
