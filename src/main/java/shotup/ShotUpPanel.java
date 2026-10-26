@@ -113,12 +113,12 @@ final class ShotUpPanel extends JPanel implements McpCommands.ShotActions {
     }
 
     @Override
-    public McpCommands.CaptureOutcome capture(boolean proxy, boolean repeater, String outputDirectory) {
+    public McpCommands.CaptureOutcome capture(boolean proxy, boolean repeater, String outputDirectory, String tabName) {
         if (SwingUtilities.isEventDispatchThread()) {
-            return runCapture(proxy, repeater, outputDirectory);
+            return runCapture(proxy, repeater, outputDirectory, tabName);
         }
         McpCommands.CaptureOutcome[] outcome = new McpCommands.CaptureOutcome[1];
-        ComponentImages.runOnEdt(() -> outcome[0] = runCapture(proxy, repeater, outputDirectory));
+        ComponentImages.runOnEdt(() -> outcome[0] = runCapture(proxy, repeater, outputDirectory, tabName));
         return outcome[0];
     }
 
@@ -133,10 +133,10 @@ final class ShotUpPanel extends JPanel implements McpCommands.ShotActions {
         if (busy.get()) {
             return;
         }
-        SwingUtilities.invokeLater(() -> runCapture(proxy, repeater, null));
+        SwingUtilities.invokeLater(() -> runCapture(proxy, repeater, null, null));
     }
 
-    private McpCommands.CaptureOutcome runCapture(boolean proxy, boolean repeater, String outputOverride) {
+    private McpCommands.CaptureOutcome runCapture(boolean proxy, boolean repeater, String outputOverride, String tabName) {
         if (!busy.compareAndSet(false, true)) {
             return McpCommands.CaptureOutcome.inProgress();
         }
@@ -149,7 +149,8 @@ final class ShotUpPanel extends JPanel implements McpCommands.ShotActions {
             Preferences.userNodeForPackage(ShotUpPanel.class).put(PREF_DIR, directory.getText().trim());
             Frame frame = api.userInterface().swingUtils().suiteFrame();
             List<McpCommands.SavedFile> saved = new ArrayList<>();
-            SectionCapture.capture(frame, proxy, repeater, (name, image, detail) -> saved.add(save(dir, name, image, detail)));
+            SectionCapture.capture(frame, proxy, repeater, tabName,
+                    (name, image, detail) -> saved.add(save(dir, name, image, detail)));
             if (saved.isEmpty()) {
                 Files.createDirectories(dir);
             }

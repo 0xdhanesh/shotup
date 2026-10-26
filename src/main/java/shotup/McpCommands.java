@@ -44,7 +44,7 @@ final class McpCommands {
 
         void setOutputDirectory(String directory);
 
-        CaptureOutcome capture(boolean proxy, boolean repeater, String outputDirectory);
+        CaptureOutcome capture(boolean proxy, boolean repeater, String outputDirectory, String tabName);
     }
 
     static Reply execute(String command, String body, ShotActions actions) {
@@ -70,11 +70,16 @@ final class McpCommands {
     }
 
     private static Reply capture(String action, boolean proxy, boolean repeater, String body, ShotActions actions) {
-        String override = directoryOverride(JsonText.object(body));
+        Map<String, String> fields = JsonText.object(body);
+        String override = directoryOverride(fields);
         if (override != null && override.isBlank()) {
             return new Reply(400, error("outputDirectory is empty."));
         }
-        CaptureOutcome outcome = actions.capture(proxy, repeater, override);
+        String tabName = fields.get("tabName");
+        if (tabName != null && (tabName.isBlank() || !repeater || proxy)) {
+            return new Reply(400, error("tabName requires capture-repeater and a nonempty Repeater tab title."));
+        }
+        CaptureOutcome outcome = actions.capture(proxy, repeater, override, tabName);
         if (outcome.alreadyRunning()) {
             return new Reply(409, actionError(action, outcome.error()));
         }
@@ -129,13 +134,15 @@ final class McpCommands {
                 "call_extension_command with header " + HEADER
                         + " and command set to a tool name. "
                         + "capture-proxy, capture-repeater, and capture-both take an optional JSON body "
-                        + "{\"outputDirectory\":\"/absolute/path\"}. The response lists PNG paths.");
+                        + "{\"outputDirectory\":\"/absolute/path\"}. "
+                        + "capture-repeater also accepts tabName to capture only that exact tab. "
+                        + "The response lists PNG paths.");
         out.append(",\"tools\":[");
         tool(out, "capture-proxy", ready,
                 "Save PNG screenshots of Proxy Intercept and HTTP history. "
                         + "Each image stacks the visible section with the full request and the full response.");
         tool(out, "capture-repeater", ready,
-                "Save a PNG of every open Repeater tab: request and response side by side. "
+                "Save a PNG of every open Repeater tab, or only the exact tabName supplied: request and response side by side. "
                         + "The Inspector rail is left out. Notes are included only when already open.");
         tool(out, "capture-both", ready,
                 "Save Proxy screenshots, then every open Repeater tab "

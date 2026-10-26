@@ -16,7 +16,7 @@ The ShotUp tab and the ShotUp menu work on their own. Load burp-mcp in the same 
 gradle test jar --no-daemon
 ```
 
-The jar is `build/libs/shotup-2.0.0.jar`. The version comes from `build.gradle`.
+The jar is `build/libs/shotup-2.0.2.jar`. The version comes from `build.gradle`.
 
 The tests paint Swing components, so they need a display. The GitHub Actions workflow runs them under `xvfb-run` on Ubuntu. On macOS they use the window server.
 
@@ -24,7 +24,7 @@ The tests paint Swing components, so they need a display. The GitHub Actions wor
 
 1. In Burp, open **Extensions → Installed → Add**.
 2. Set the extension type to **Java**.
-3. Select `build/libs/shotup-2.0.0.jar`.
+3. Select `build/libs/shotup-2.0.2.jar`.
 
 Burp adds a **ShotUp** suite tab and a **ShotUp** menu. The extension output shows `ShotUp loaded` when the jar starts.
 
@@ -65,7 +65,7 @@ Leave host, port, and TLS unset on the MCP call. burp-mcp then addresses `127.0.
 | `tools` | Ignored. This is the discovery probe. | Catalog. `extension` is `ShotUp`. `commands` lists the commands. `tools` is an array of `{name, enabled, description}`. |
 | `status` | Ignored. | `outputDirectory` (the Save to folder) and `busy`. |
 | `capture-proxy` | Optional `{"outputDirectory":"/absolute/path"}`. | PNG paths. |
-| `capture-repeater` | Same optional body. | PNG paths. |
+| `capture-repeater` | Optional `{"outputDirectory":"/absolute/path","tabName":"AUTH-001-control"}`. `tabName` must exactly match one Repeater tab; omit it only when you intend to capture every open tab. | PNG paths. |
 | `capture-both` | Same optional body. | PNG paths. |
 | `set-output-directory` | `{"outputDirectory":"/absolute/path"}`. | Updates the Save to field. |
 
@@ -104,10 +104,10 @@ body: {"outputDirectory":"/tmp/shotup"}
 A successful body looks like:
 
 ```json
-{"ok":true,"extension":"ShotUp","version":"2.0.0","action":"capture-both","outputDirectory":"/tmp/shotup/20261010-153045","count":4,"files":[{"name":"proxy-intercept","path":"/tmp/shotup/20261010-153045/proxy-intercept.png","detail":""}]}
+{"ok":true,"extension":"ShotUp","version":"2.0.2","action":"capture-both","outputDirectory":"/tmp/shotup/20261010-153045","count":4,"files":[{"name":"proxy-intercept","path":"/tmp/shotup/20261010-153045/proxy-intercept.png","detail":""}]}
 ```
 
-The call blocks until the PNGs are written. Burp switches to Proxy and Repeater during the capture, then returns to the tool you had open.
+The call blocks until the PNGs are written. Burp switches to Proxy and Repeater during the capture, then returns to the tool you had open. Screenshots can contain credentials and customer data. For assessment reporting, capture one named tab into an approved restricted staging directory, verify a redacted copy, then remove the raw PNG.
 
 ## How the picture is taken
 

@@ -98,6 +98,21 @@ class SectionCaptureTest {
     }
 
     @Test
+    void namedRepeaterCaptureLeavesOtherTabsOut() throws Exception {
+        SwingFixture fixture = SwingFixture.build();
+        try {
+            List<Shot> shots = new ArrayList<>();
+            SwingUtilities.invokeAndWait(() -> SectionCapture.capture(
+                    fixture.frame, false, true, "Alpha",
+                    (name, image, detail) -> shots.add(new Shot(name, image, detail))));
+            assertEquals(List.of("repeater-01-Alpha"), names(shots));
+            SwingUtilities.invokeAndWait(() -> assertEquals(0, fixture.repeaterTabs.getSelectedIndex()));
+        } finally {
+            SwingUtilities.invokeAndWait(() -> fixture.frame.dispose());
+        }
+    }
+
+    @Test
     void capturesCaptionStripAndOpenNotesWithoutTheRail() throws Exception {
         CaptionFixture fixture = CaptionFixture.build();
         try {

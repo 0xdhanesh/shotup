@@ -16,7 +16,7 @@ class McpCommandsTest {
 
         assertEquals(200, reply.status());
         assertTrue(reply.body().contains("\"extension\":\"ShotUp\""));
-        assertTrue(reply.body().contains("\"version\":\"2.0.0\""));
+        assertTrue(reply.body().contains("\"version\":\"2.0.2\""));
         assertTrue(reply.body().contains("\"commandHeader\":\"X-Burp-Mcp-Discover\""));
         assertTrue(reply.body().contains(
                 "\"commands\":\"tools, status, capture-proxy, capture-repeater, capture-both, set-output-directory\""));
@@ -58,7 +58,7 @@ class McpCommandsTest {
         McpCommands.Reply reply = McpCommands.execute("status", "   ", actions);
         assertEquals(200, reply.status());
         assertEquals(
-                "{\"ok\":true,\"extension\":\"ShotUp\",\"version\":\"2.0.0\",\"action\":\"status\","
+                "{\"ok\":true,\"extension\":\"ShotUp\",\"version\":\"2.0.2\",\"action\":\"status\","
                         + "\"busy\":false,\"outputDirectory\":\"/tmp/ShotUp\","
                         + "\"commandHeader\":\"X-Burp-Mcp-Discover\","
                         + "\"commands\":\"tools, status, capture-proxy, capture-repeater, capture-both, set-output-directory\"}",
@@ -79,7 +79,7 @@ class McpCommandsTest {
         assertFalse(actions.repeater);
         assertEquals("/tmp/shots", actions.requestedDirectory);
         assertEquals(
-                "{\"ok\":true,\"extension\":\"ShotUp\",\"version\":\"2.0.0\",\"action\":\"capture-proxy\","
+                "{\"ok\":true,\"extension\":\"ShotUp\",\"version\":\"2.0.2\",\"action\":\"capture-proxy\","
                         + "\"outputDirectory\":\"/tmp/ShotUp/20261010-120000\",\"count\":1,\"files\":["
                         + "{\"name\":\"proxy-intercept\",\"path\":\"/tmp/ShotUp/20261010-120000/proxy-intercept.png\","
                         + "\"detail\":\"Request was truncated at 8000x14000 pixels.\"}]}",
@@ -93,6 +93,24 @@ class McpCommandsTest {
         assertTrue(actions.proxy);
         assertTrue(actions.repeater);
         assertEquals(null, actions.requestedDirectory);
+    }
+
+    @Test
+    void captureRepeaterCanSelectOneExactTab() {
+        Fake actions = new Fake();
+        McpCommands.Reply reply = McpCommands.execute("capture-repeater", "{\"tabName\":\"AUTH-001-control\"}", actions);
+        assertEquals(200, reply.status());
+        assertEquals("AUTH-001-control", actions.requestedTabName);
+        assertFalse(actions.proxy);
+        assertTrue(actions.repeater);
+    }
+
+    @Test
+    void tabSelectionIsRejectedForBroadCaptures() {
+        Fake actions = new Fake();
+        McpCommands.Reply reply = McpCommands.execute("capture-both", "{\"tabName\":\"AUTH-001-control\"}", actions);
+        assertEquals(400, reply.status());
+        assertEquals(0, actions.captures);
     }
 
     @Test
@@ -219,6 +237,7 @@ class McpCommandsTest {
         private boolean proxy;
         private boolean repeater;
         private String requestedDirectory;
+        private String requestedTabName;
         private McpCommands.CaptureOutcome outcome = McpCommands.CaptureOutcome.saved(
                 "/tmp/ShotUp/20261010-120000",
                 List.of(new McpCommands.SavedFile(
@@ -242,11 +261,12 @@ class McpCommandsTest {
         }
 
         @Override
-        public McpCommands.CaptureOutcome capture(boolean proxy, boolean repeater, String outputDirectory) {
+        public McpCommands.CaptureOutcome capture(boolean proxy, boolean repeater, String outputDirectory, String tabName) {
             captures++;
             this.proxy = proxy;
             this.repeater = repeater;
             requestedDirectory = outputDirectory;
+            requestedTabName = tabName;
             return outcome;
         }
     }

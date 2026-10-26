@@ -27,10 +27,17 @@ public final class SectionCapture {
     }
 
     public static void capture(Frame frame, boolean proxy, boolean repeater, ShotSink sink) {
-        ComponentImages.runOnEdt(() -> captureOnEdt(frame, proxy, repeater, sink));
+        capture(frame, proxy, repeater, null, sink);
     }
 
-    private static void captureOnEdt(Frame frame, boolean proxy, boolean repeater, ShotSink sink) {
+    public static void capture(Frame frame, boolean proxy, boolean repeater, String tabName, ShotSink sink) {
+        if (tabName != null && (!repeater || proxy || tabName.isBlank())) {
+            throw new IllegalArgumentException("tabName requires a Repeater-only capture and a nonempty title.");
+        }
+        ComponentImages.runOnEdt(() -> captureOnEdt(frame, proxy, repeater, tabName, sink));
+    }
+
+    private static void captureOnEdt(Frame frame, boolean proxy, boolean repeater, String tabName, ShotSink sink) {
         if (frame == null || !frame.isShowing()) {
             throw new IllegalStateException("The Burp window is not open. Restore it and try again.");
         }
@@ -45,7 +52,7 @@ public final class SectionCapture {
                 captureProxy(suite, sink);
             }
             if (repeater) {
-                captureRepeater(suite, sink);
+                captureRepeater(suite, tabName, sink);
             }
         } finally {
             select(suite, previous);
@@ -93,16 +100,24 @@ public final class SectionCapture {
         }
     }
 
-    private static void captureRepeater(JTabbedPane suite, ShotSink sink) {
+    private static void captureRepeater(JTabbedPane suite, String tabName, ShotSink sink) {
         int repeaterIndex = SwingSearch.indexOf(suite, "repeater");
         select(suite, repeaterIndex);
         Component repeater = suite.getComponentAt(repeaterIndex);
         layout(repeater);
         JTabbedPane tabs = SwingSearch.repeaterTabs(repeater);
         if (tabs != null) {
+            if (tabName != null) {
+                int matches = 0;
+                for (int i = 0; i < tabs.getTabCount(); i++) {
+                    if (tabName.equals(repeaterTitle(tabs, i))) matches++;
+                }
+                if (matches != 1) throw new IllegalArgumentException("Expected exactly one Repeater tab titled '" + tabName + "'.");
+            }
             int previous = tabs.getSelectedIndex();
             try {
                 for (int i = 0; i < tabs.getTabCount(); i++) {
+                    if (tabName != null && !tabName.equals(repeaterTitle(tabs, i))) continue;
                     String name = "repeater-" + String.format("%02d", i + 1) + "-"
                             + SwingSearch.safeName(repeaterTitle(tabs, i));
                     select(tabs, i);
@@ -115,10 +130,18 @@ public final class SectionCapture {
         }
         List<Component> captions = SwingSearch.repeaterCaptions(repeater);
         if (!captions.isEmpty()) {
+            if (tabName != null) {
+                long matches = captions.stream().filter(c -> tabName.equals(SwingSearch.captionText(c))).count();
+                if (matches != 1) throw new IllegalArgumentException("Expected exactly one Repeater tab titled '" + tabName + "'.");
+            }
             List<AbstractButton> selected = selectedButtons(repeater);
             try {
                 int index = 1;
                 for (Component caption : captions) {
+                    if (tabName != null && !tabName.equals(SwingSearch.captionText(caption))) {
+                        index++;
+                        continue;
+                    }
                     activateCaption(caption);
                     layout(repeater);
                     String name = "repeater-" + String.format("%02d", index++) + "-"
@@ -130,6 +153,7 @@ public final class SectionCapture {
             }
             return;
         }
+        if (tabName != null) throw new IllegalArgumentException("Could not identify the requested Repeater tab.");
         captureMessage("repeater", repeater, repeater, sink);
     }
 
